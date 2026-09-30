@@ -73,3 +73,12 @@ test("concurrency limiter never exceeds configured concurrency", async () => {
 	assert.deepEqual(result, [2, 4, 6, 8, 10, 12]);
 	assert.equal(maxActive, 3);
 });
+
+test("expected builtin:mcp warning from package-mcp children is stripped from stderr", async () => {
+	const { stripExpectedChildWarnings } = await import("../runner.ts");
+	const warning =
+		'Warning: Extension package "builtin:mcp": Extension /x/pi-core/extensions/package-mcp.ts registers command `/mcp`, so built-in extension `mcp` was not loaded. To use `mcp`, run `pi config`.';
+	assert.equal(stripExpectedChildWarnings(`${warning}\n`), "");
+	assert.equal(stripExpectedChildWarnings(`${warning}\nreal error\n`), "real error\n");
+	assert.equal(stripExpectedChildWarnings("other warning\n"), "other warning\n");
+});

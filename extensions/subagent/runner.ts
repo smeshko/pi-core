@@ -7,6 +7,18 @@ import { buildChildEnv, buildRuntimeArgs } from "./config.ts";
 import { applyJsonEventLine, getFinalOutput } from "./json-events.ts";
 import type { AgentConfig, ChildRuntimePolicy, SingleResult, SubagentConfig, SubagentDetails, UsageStats } from "./types.ts";
 
+/**
+ * package-mcp stubs `/mcp` in children that cannot reach MCP tools, so the built-in MCP steps
+ * aside and warns about it. That warning is expected; keep it out of progress and error text.
+ */
+export function stripExpectedChildWarnings(text: string): string {
+	return text
+		.split("\n")
+		.filter((line) => !/^Warning: Extension package "builtin:mcp": .*package-mcp\.ts registers command `\/mcp`/.test(line))
+		.join("\n")
+		.replace(/^\n+/, "");
+}
+
 export const PER_TASK_OUTPUT_CAP_BYTES = 50 * 1024;
 
 export type ToolContent = { type: "text"; text: string };
@@ -317,7 +329,8 @@ export async function runSingleAgent(options: RunSingleAgentOptions): Promise<Si
 			});
 
 			proc.stderr.on("data", (data: Buffer) => {
-				currentResult.stderr = appendBounded(currentResult.stderr, data.toString("utf8"), config.stderrMaxBytes);
+				const text = stripExpectedChildWarnings(data.toString("utf8"));
+				if (text) currentResult.stderr = appendBounded(currentResult.stderr, text, config.stderrMaxBytes);
 			});
 
 			proc.on("error", (error) => {

@@ -4,19 +4,19 @@ Adds `/context`, a breakdown of where the context window is going plus an invent
 
 ## Install
 
-Auto-discovered from `~/.pi/agent/extensions/context/index.ts`. Run `/reload` after changes.
+Part of pi-core; loaded as a package extension. Run `/reload` after changes.
 
 ## What it shows
 
 | Section | Source |
 |---|---|
 | Block grid + category legend | `ctx.getContextUsage()` for the total, local chars/4 estimates for the split |
-| MCP tools | `mcp:registry:request` event to the MCP extension, falling back to `mcp__<server>__` name parsing |
+| MCP tools | Built-in MCP tools from `pi.getAllTools()`: `mcp__<server>__` names, `namespace` and `exposure` |
 | Memory files | Recursive scan for `AGENTS.md` / `CLAUDE.md` under cwd, plus ancestors and the agent dir; split into in-context and nested |
-| Extensions | Directory scan cross-referenced with `sourceInfo.path` from `getAllTools()` / `getCommands()` |
+| Extensions | Package, profile and project extension dir scan cross-referenced with `sourceInfo.path` from `getAllTools()` / `getCommands()` |
 | Skills | `getSystemPromptOptions().skills`, grouped by scope |
 | Commands | `pi.getCommands()`, extension and prompt sources only (skills have their own section) |
-| Agents | `~/.pi/agent/agents/*.md` and `.pi/agents/*.md` frontmatter |
+| Agents | `agents/*.md` from packages, the profile and `.pi/agents`, same precedence as the subagent extension |
 | Keybindings | `keybindings.json` overrides, default table count, and `registerShortcut` calls parsed from extension sources |
 | Themes | `ctx.ui.getAllThemes()` |
 

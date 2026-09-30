@@ -49,20 +49,6 @@ export type ContextReport = {
 	themes: string[];
 };
 
-type McpSnapshot = {
-	servers: Array<{
-		name: string;
-		type: string;
-		scope: string;
-		status: string;
-		error?: string;
-		toolNames: string[];
-	}>;
-	toolOwners: Record<string, string>;
-	configErrors: string[];
-};
-
-const MCP_REGISTRY_REQUEST = "mcp:registry:request";
 
 export function toTokens(chars: number): number {
 	return Math.ceil(chars / 4);
@@ -85,21 +71,6 @@ function readDirSafe(dir: string): string[] {
 	} catch {
 		return [];
 	}
-}
-
-/** Asks the MCP extension for its live registry. Returns undefined when it is not loaded. */
-function requestMcpSnapshot(pi: ExtensionAPI): McpSnapshot | undefined {
-	let snapshot: McpSnapshot | undefined;
-	try {
-		pi.events.emit(MCP_REGISTRY_REQUEST, {
-			respond: (value: McpSnapshot) => {
-				snapshot = value;
-			},
-		});
-	} catch {
-		return undefined;
-	}
-	return snapshot;
 }
 
 function toolTokens(tool: { description?: string; parameters?: unknown }): number {
@@ -461,9 +432,12 @@ export function collectReport(pi: ExtensionAPI, ctx: ExtensionCommandContext): C
 
 	const baseSystemTokens = Math.max(0, systemPromptTokens - contextFileTokens - skillTokens);
 
-	const snapshot = requestMcpSnapshot(pi);
-	const owners = snapshot?.toolOwners ?? {};
-	const isMcpTool = (name: string) => (snapshot ? name in owners : name.startsWith("mcp__"));
+	// Built-in MCP (pi >= 0.99): tools are `mcp__<server>__<tool>` with namespace `mcp__<server>`.
+	// Undeclared exposures (codemode, deferred) are reached through codemode / tool_search.
+	const isMcpTool = (name: string) => name.startsWith("mcp__");
+	const serverOf = (tool: { name: string; namespace?: { name: string } }) =>
+		tool.namespace?.name?.replace(/^mcp__/, "") ?? tool.name.split("__")[1] ?? "unknown";
+	const exposureByServer = new Map<string, Set<string>>();
 
 	const allTools = pi.getAllTools();
 	const activeNames = new Set(pi.getActiveTools());
@@ -483,7 +457,10 @@ export function collectReport(pi: ExtensionAPI, ctx: ExtensionCommandContext): C
 		}
 
 		if (!mcpTool) continue;
-		const server = owners[tool.name] ?? tool.name.split("__")[1] ?? "unknown";
+		const server = serverOf(tool);
+		const exposures = exposureByServer.get(server) ?? new Set<string>();
+		exposures.add(String((tool as { exposure?: string }).exposure ?? "unknown"));
+		exposureByServer.set(server, exposures);
 		const bucket = availableByServer.get(server) ?? { count: 0, tokens: 0 };
 		bucket.count++;
 		bucket.tokens += tokens;
@@ -493,25 +470,15 @@ export function collectReport(pi: ExtensionAPI, ctx: ExtensionCommandContext): C
 	loadedMcp.sort((a, b) => b.tokens - a.tokens);
 	const loadedMcpTokens = loadedMcp.reduce((sum, tool) => sum + tool.tokens, 0);
 
-	const servers = (snapshot?.servers ?? [...availableByServer.keys()].map((name) => ({
+	const servers = [...availableByServer.entries()].map(([name, bucket]) => ({
 		name,
-		type: "stdio",
-		scope: "user",
+		type: [...(exposureByServer.get(name) ?? [])].join("/") || "mcp",
+		scope: "builtin",
 		status: "connected",
-		error: undefined,
-		toolNames: [],
-	}))).map((server) => {
-		const bucket = availableByServer.get(server.name) ?? { count: 0, tokens: 0 };
-		return {
-			name: server.name,
-			type: server.type,
-			scope: server.scope,
-			status: server.status,
-			error: server.error,
-			availableCount: bucket.count,
-			availableTokens: bucket.tokens,
-		};
-	});
+		error: undefined as string | undefined,
+		availableCount: bucket.count,
+		availableTokens: bucket.tokens,
+	}));
 	const savedTokens = servers.reduce((sum, server) => sum + server.availableTokens, 0);
 
 	const fixedTokens =

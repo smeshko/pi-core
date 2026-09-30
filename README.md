@@ -8,7 +8,7 @@ Look-and-feel lives in [pi-taste](https://github.com/smeshko/pi-taste), which de
 | `extensions/` | pi (package discovery: top-level `.ts` files, subdirs with `index.ts`) |
 | `skills/`, `prompts/` | pi (package discovery) |
 | `agents/` (none here) | `extensions/subagent` reads `agents/` from any package: package < profile < project `.pi/agents`. Agents pin models, so they live in pi-personal / pi-work |
-| `mcp.json` | `extensions/mcp`: package `mcp.json` < profile `mcp.json` < project `.pi/mcp.json` |
+| `mcp.json` | `extensions/package-mcp.ts` registers package servers with pi's built-in MCP; profile `mcp.json` and project `.pi/mcp.json` win on name clashes. Subagent children get no MCP unless their `--tools` include `codemode`, `tool_search` or `mcp__*` |
 | `AGENTS.md` | symlinked into each profile dir (`<agentDir>/AGENTS.md`) |
 
 `extensions/shared/` has no `index.ts`, so pi does not load it as an extension.
@@ -31,7 +31,7 @@ pii   # ~/.local/bin/pii runs: PI_CODING_AGENT_DIR=~/.pi/personal exec pi "$@"
 ## Development
 
 ```bash
-npm install   # runtime deps (MCP SDK) + dev deps for tests
+npm install   # dev deps for tests (pi itself supplies runtime packages)
 npm test      # runs every extensions/*/tests suite
 ```
 
