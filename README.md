@@ -6,10 +6,9 @@ Look-and-feel lives in [pi-taste](https://github.com/smeshko/pi-taste), which de
 | Path | Loaded by |
 |---|---|
 | `extensions/` | pi (package discovery: top-level `.ts` files, subdirs with `index.ts`) |
-| `skills/`, `prompts/` | pi (package discovery) |
+| `prompts/` | pi (package discovery) |
 | `agents/` (none here) | `extensions/subagent` reads `agents/` from any package: package < profile < project `.pi/agents`. Agents pin models, so they live in pi-personal / pi-work |
 | `mcp.json` | `extensions/package-mcp.ts` registers package servers with pi's built-in MCP; profile `mcp.json` and project `.pi/mcp.json` win on name clashes. Subagent children get no MCP unless their `--tools` include `codemode`, `tool_search` or `mcp__*` |
-| `AGENTS.md` | symlinked into each profile dir (`<agentDir>/AGENTS.md`) |
 
 `extensions/shared/` has no `index.ts`, so pi does not load it as an extension.
 `shared/package-roots.ts` resolves configured package roots from the profile's `settings.json`.
@@ -36,3 +35,6 @@ npm test      # runs every extensions/*/tests suite
 ```
 
 Local-path packages load directly from this checkout; edits apply on the next `/reload` or restart.
+
+No skills and no `AGENTS.md` here: skills shared across harnesses live in `~/.dotfiles/agents/skills`,
+and each profile's `AGENTS.md` lives in its profile package (pi-personal / pi-work).
