@@ -1,0 +1,5 @@
+{
+	"name": "pi-shared-tool-render",
+	"private": true,
+	"type": "module"
+}
