@@ -21,11 +21,11 @@ Each profile is a pi agent dir holding `settings.json`, `auth.json`, sessions an
 | Profile | Agent dir | Packages |
 |---|---|---|
 | work | `~/.pi/agent` (default) | pi-core, pi-taste, `~/Developer/rewe/pi-work` |
-| personal | `~/.pi/agent-personal` | pi-core, pi-taste, pi-personal |
+| personal | `~/.pi/personal` | pi-core, pi-taste, pi-personal |
 | colleague | their own | pi-core (+ their own packages) |
 
 ```bash
-alias pi-personal='PI_CODING_AGENT_DIR=~/.pi/agent-personal pi'
+pii   # ~/.local/bin/pii runs: PI_CODING_AGENT_DIR=~/.pi/personal exec pi "$@"
 ```
 
 ## Development
