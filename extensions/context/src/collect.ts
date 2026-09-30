@@ -5,6 +5,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { walkSkipReason } from "../../shared/nested-agents.ts";
+import { packageRoots } from "../../shared/package-roots.ts";
+
 export const CATEGORY_KEYS = ["system", "tools", "mcp", "files", "skills", "messages"] as const;
 export type CategoryKey = (typeof CATEGORY_KEYS)[number];
 
@@ -124,13 +127,23 @@ function parseFrontmatter(content: string): Record<string, string> {
 	return result;
 }
 
+/** Package resource dirs, labelled with the package folder name (e.g. `pi-core`). */
+function packageDirs(cwd: string, projectTrusted: boolean, subdir: string): Array<{ dir: string; scope: string }> {
+	return packageRoots(cwd, { projectTrusted }).map((pkg) => ({
+		dir: path.join(pkg.root, subdir),
+		scope: path.basename(pkg.root),
+	}));
+}
+
+/** Same precedence as the subagent extension: packages < profile < project; later names win. */
 function collectAgents(cwd: string): ContextReport["agents"] {
 	const sources: Array<{ dir: string; scope: string }> = [
+		...packageDirs(cwd, false, "agents"),
 		{ dir: path.join(agentDir(), "agents"), scope: "user" },
 		{ dir: path.join(cwd, ".pi", "agents"), scope: "project" },
 	];
 
-	const agents: ContextReport["agents"] = [];
+	const byName = new Map<string, ContextReport["agents"][number]>();
 	for (const { dir, scope } of sources) {
 		for (const file of readDirSafe(dir)) {
 			if (!file.endsWith(".md")) continue;
@@ -141,18 +154,20 @@ function collectAgents(cwd: string): ContextReport["agents"] {
 				continue;
 			}
 			const meta = parseFrontmatter(content);
-			agents.push({
-				name: meta.name ?? path.basename(file, ".md"),
+			const name = meta.name ?? path.basename(file, ".md");
+			byName.set(name, {
+				name,
 				scope,
 				description: (meta.description ?? "").split(/(?<=\.)\s/)[0] ?? "",
 			});
 		}
 	}
-	return agents;
+	return [...byName.values()];
 }
 
-function collectExtensionDirs(cwd: string): Array<{ name: string; scope: string; entryPaths: string[] }> {
+export function collectExtensionDirs(cwd: string, projectTrusted: boolean): Array<{ name: string; scope: string; entryPaths: string[] }> {
 	const sources: Array<{ dir: string; scope: string }> = [
+		...packageDirs(cwd, projectTrusted, "extensions"),
 		{ dir: path.join(agentDir(), "extensions"), scope: "user" },
 		{ dir: path.join(cwd, ".pi", "extensions"), scope: "project" },
 	];
@@ -204,8 +219,14 @@ const MEMORY_SKIP_DIRS = new Set([
 const MEMORY_MAX_DEPTH = 8;
 const MEMORY_MAX_FILES = 200;
 
-/** Finds every AGENTS.md / CLAUDE.md under cwd plus the ancestors pi and Claude Code consult. */
-function collectMemoryFiles(cwd: string, loadedPaths: Set<string>): ContextReport["memoryFiles"] {
+/**
+ * Finds every AGENTS.md / CLAUDE.md under cwd plus the ancestors pi and Claude Code consult.
+ *
+ * The downward walk uses the same gate as nested-agents: only a git repository
+ * root with its own AGENTS.md is walked. Anywhere else (e.g. `~`) only cwd itself
+ * is checked, otherwise this would crawl the whole disk.
+ */
+export function collectMemoryFiles(cwd: string, loadedPaths: Set<string>): ContextReport["memoryFiles"] {
 	const found = new Map<string, number>();
 
 	const addFile = (filePath: string) => {
@@ -236,7 +257,14 @@ function collectMemoryFiles(cwd: string, loadedPaths: Set<string>): ContextRepor
 		}
 	};
 
-	visit(cwd, 0);
+	if (walkSkipReason(cwd)) {
+		for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+			const candidate = path.join(cwd, name);
+			if (fs.existsSync(candidate)) addFile(candidate);
+		}
+	} else {
+		visit(cwd, 0);
+	}
 
 	// Ancestors above cwd, plus the global agent directory.
 	let ancestor = path.dirname(cwd);
@@ -517,7 +545,8 @@ export function collectReport(pi: ExtensionAPI, ctx: ExtensionCommandContext): C
 		prompt: commandInfos.filter((c) => c.source === "prompt").map((c) => c.name),
 	};
 
-	const extensionDirs = collectExtensionDirs(ctx.cwd);
+	const projectTrusted = ctx.isProjectTrusted?.() ?? false;
+	const extensionDirs = collectExtensionDirs(ctx.cwd, projectTrusted);
 	const extensions = extensionDirs.map((extension) => {
 		const owns = (candidate: string | undefined) =>
 			!!candidate && extension.entryPaths.some((base) => candidate === base || candidate.startsWith(`${base}/`));
